@@ -2,6 +2,10 @@
 import time
 from numpy import *
 
+"""
+Tester
+"""
+
 def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scalar',plug='no',exact='no'):
 		if version == 'vectorized':
 			advance = advance_vectorized
