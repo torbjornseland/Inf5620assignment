@@ -38,7 +38,6 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 			if dt <= 0:
 				safety_factor = -dt # use negative dt as safety factor
 				dt = safety_factor*stability_limit
-				print "stab",stability_limit
 			elif dt > stability_limit:
 				print 'error: dt=%g exceeds the stability limit %g' % (dt, stability_limit)
 
@@ -127,7 +126,7 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 					
 
 					u_2[:,:], u_1[:,:] = u_1, u
-				if max_E==None or max_E < abs(u-u_e).max():
+				if max_E==None or max_E < abs(u[2:-2,2:-2]-u_e[2:-2,2:-2]).max():
 						max_E = abs(u-u_e).max()
 		else:			
 			for n in It[1:-1]:
@@ -138,9 +137,9 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 					f_a[:,:] = f(xv, yv, t[n]) # precompute, size as u
 					u = advance(x,y,b,q,u, u_1, u_2, f_a, Cx2, Cy2, dt,V)
 
-					if user_action is not None:
-						if user_action(u, x, xv, y, yv, t, n+1):
-							break
+				if user_action is not None:
+					if user_action(u, x, xv, y, yv, t, n+1):
+						break
 
 					u_2[:,:], u_1[:,:] = u_1, u
 
@@ -580,7 +579,7 @@ def exact_solution_undamped():
 			print "----------------"
 			Nxy = int(Lx/h)
 			dt = h/sqrt(2*c_0)
-			u,x, dt, cpu,max_E = solver(b, c, I, V, None, Lx, Ly, Nxy, Nxy, dt, T,user_action=None, version='scalar',exact='ok')
+			u,x, dt, cpu,max_E = solver(b, c, I, V, None, Lx, Ly, Nxy, Nxy, dt, T,user_action=None, version='vectorized',exact='ok')
 			print "C", max_E/float(h)
 			print "dt", dt
 			print "max",max_E
@@ -594,8 +593,8 @@ if __name__ == '__main__':
 	#test_constant()
 	#cpu, dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
 	#print dt
-	#cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
+	cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
 	#run_efficiency_tests(nrefinements=4)
 	#dt, cpu = pulse2()
 	#pulse2()
-	dt = exact_solution_undamped()
+	#dt = exact_solution_undamped()
