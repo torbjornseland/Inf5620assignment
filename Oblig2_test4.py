@@ -54,12 +54,11 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		if q is None or q==0:
 			q=(lambda x, y, t: 0) if version == 'scalar' else lambda x, y, t: zeros((x.shape[0], y.shape[1]))
 
-		order ='C'
-		u = zeros((Nx+1,Ny+1), order=order) # solution array
-		u_1 = zeros((Nx+1,Ny+1), order=order) # solution at t-dt
-		u_2 = zeros((Nx+1,Ny+1), order=order) # solution at t-2*dt
-		f_a = zeros((Nx+1,Ny+1), order=order) # for compiled loops
-		
+		u   = zeros((Nx+1,Ny+1)) # solution array
+		u_1 = zeros((Nx+1,Ny+1)) # solution at t-dt
+		u_2 = zeros((Nx+1,Ny+1)) # solution at t-2*dt
+		f_a = zeros((Nx+1,Ny+1)) # for compiled loops
+		q_a = zeros((Nx+1,Ny+1)) # for compiled loops
 		#Exact solution
 		max_E = 0
 		if exact=='ok':
@@ -98,7 +97,8 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 
 		else: # use vectorized version
 			f_a[:,:] = f(xv, yv, t[n]) # precompute, size as u
-			u = advance(x,y,b,q,u, u_1, u_2, f_a, Cx2, Cy2, dt, V, step1=True)
+			q_a[:,:] = q(xv, yv)
+			u = advance(x, y, b, q_a, u, u_1, u_2, f_a, Cx2, Cy2, dt, V, step1=True)
 
 		if user_action is not None:
 			user_action(u, x, xv, y, yv, t, 1)
@@ -114,8 +114,8 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 
 				else:
 					f_a[:,:] = f(xv, yv, t[n]) # precompute, size as u
-					u = advance(x,y,b,q,u, u_1, u_2, f_a, Cx2, Cy2, dt,V)
-					
+					q_a[:,:] = q(xv, yv)
+            				u = advance(x, y, b, q_a, u, u_1, u_2, f_a, Cx2, Cy2, dt,V)
 					
 					if user_action is not None:
 						if user_action(u, x, xv, y, yv, t, n+1):
@@ -132,11 +132,12 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 					u = advance(Nx, Ny, b, q, u, u_1, u_2, f, x, y, t, n, Cx2, Cy2, dt,V)
 				else:
 					f_a[:,:] = f(xv, yv, t[n]) # precompute, size as u
-					u = advance(x,y,b,q,u, u_1, u_2, f_a, Cx2, Cy2, dt,V)
+					q_a[:,:] = q(xv, yv)
+            				u = advance(x, y, b, q_a, u, u_1, u_2, f_a, Cx2, Cy2, dt,V)
 
-					if user_action is not None:
-						if user_action(u, x, xv, y, yv, t, n+1):
-							break
+				if user_action is not None:
+					if user_action(u, x, xv, y, yv, t, n+1):
+						break
 
 					u_2[:,:], u_1[:,:] = u_1, u
 
@@ -264,142 +265,135 @@ def advance_scalar(Nx, Ny, b, q, u, u_1, u_2, f, x, y, t, n, Cx2, Cy2, dt,V, ste
 
 		return u
 
-def advance_vectorized(x, y, b, q, u, u_1, u_2, f_a, Cx2, Cy2, dt,V, step1=False):
-		Ix = range(0, u.shape[0]); Iy = range(0, u.shape[1])
-		dt2 = dt**2
-		R1=(1+(b*dt/2.0)); R2=((b*dt/2.0) -1)
-		if step1:
-			A = (1-(R2/R1)); B = 0.0 ; C = 2.0
+def advance_vectorized(x, y, b, q_a, u, u_1, u_2, f_a, Cx2, Cy2, dt,V, step1=False):
+	Ix = range(0, u.shape[0]); Iy = range(0, u.shape[1])
+    	dt2 = dt**2
+    	R1=(1+(b*dt/2.0)); R2=((b*dt/2.0) -1)
+    	if step1:
+        	A = (1-(R2/R1)); B = 0.0 ; C = 2.0
 
-		else:
-			A=1.0; B=1.0; C=0.0
+    	else:
+        	A=1.0; B=1.0; C=0.0
+	
+	
+	u_xqu_x  = Cx2*( 0.5*( (q_a[2:,1:-1]+q_a[1:-1,1:-1] )*(u_1[2:,1:-1]-u_1[1:-1,1:-1])) \
+				-0.5*( (q_a[:-2,1:-1]+q_a[1:-1,1:-1] )*(u_1[1:-1,1:-1]-u_1[:-2,1:-1]) ))
 
-		u_xqu_x  = Cx2*( 0.5*( (q(x[2:],y[1:-1])+q(x[1:-1],y[1:-1]) )*(u_1[2:,1:-1]-u_1[1:-1,1:-1])) \
-				-0.5*( (q(x[:-2],y[1:-1])+q(x[1:-1],y[1:-1]) )*(u_1[1:-1,1:-1]-u_1[:-2,1:-1]) ))
-
-		u_yqu_y  = Cy2*( 0.5*( (q(x[1:-1],y[2:])+ q(x[1:-1],y[1:-1]) ) * (u_1[1:-1,2:]-u_1[1:-1,1:-1]) ) \
-				-0.5*( (q(x[1:-1],y[:-2])+ q(x[1:-1],y[1:-1]) ) * (u_1[1:-1,1:-1]-u_1[1:-1,:-2]) ))
-
-		u[1:-1,1:-1] = (1/A)*( (2/R1)*u_1[1:-1,1:-1] +B*(R2/R1)*u_2[1:-1,1:-1] - C*(R2/R1)*dt*V(x[1:-1],y[1:-1])  + (1/R1)*(u_xqu_x +\
-				u_yqu_y + dt2*f_a[1:-1,1:-1]) )
-
-		# Boundary condition du/dn=0 neumann condition
-
-		# South Bondary
-		j = Iy[0]
-
-		u_xqu_x = Cx2*( 0.5*( (q(x[2:],y[j])+q(x[1:-1],y[j]) )*(u_1[2:,j]-u_1[1:-1,j])) \
-			-0.5*( (q(x[:-2],y[j])+q(x[1:-1],y[j]) )*(u_1[1:-1,j]-u_1[:-2,j]) )) 
-
-		u_yqu_y = Cy2*( 2*q(x[1:-1],y[j])*(u_1[1:-1,j+1]-u_1[1:-1,j]) )
-
-		u[1:-1,j] = (1/A) *( (2/R1)*u_1[1:-1,j] +B*(R2/R1)*u_2[1:-1,j]  - C*(R2/R1)*dt*V(x[1:-1], y[j]) +(1/R1)*(u_xqu_x +\
+    	u_yqu_y  = Cy2*( 0.5*( (q_a[1:-1,2:]+ q_a[1:-1,1:-1] ) * (u_1[1:-1,2:]-u_1[1:-1,1:-1]) ) \
+				 -0.5*( (q_a[1:-1,:-2]+ q_a[1:-1,1:-1] ) * (u_1[1:-1,1:-1]-u_1[1:-1,:-2]) ))
+	
+	u[1:-1,1:-1] = (1/A)*( (2/R1)*u_1[1:-1,1:-1] +B*(R2/R1)*u_2[1:-1,1:-1] - C*(R2/R1)*dt*V(x[1:-1],y[1:-1])  + (1/R1)*(u_xqu_x +\
+			 u_yqu_y + dt2*f_a[1:-1,1:-1]) )
+	
+	
+	# Boundary condition du/dn=0 neumann condition
+	
+	# South Bondary
+    	j = Iy[0]
+    	
+	u_xqu_x = Cx2*( 0.5*( (q_a[2:,j]+q_a[1:-1,j] )*(u_1[2:,j]-u_1[1:-1,j])) \
+			-0.5*( (q_a[:-2,j]+q_a[1:-1,j] )*(u_1[1:-1,j]-u_1[:-2,j]) )) 
+	
+	u_yqu_y = Cy2*( 2*q_a[1:-1,j]*(u_1[1:-1,j+1]-u_1[1:-1,j]) )
+ 
+	u[1:-1,j] = (1/A) *( (2/R1)*u_1[1:-1,j] +B*(R2/R1)*u_2[1:-1,j]  - C*(R2/R1)*dt*V(x[1:-1], y[j]) +(1/R1)*(u_xqu_x +\
 			u_yqu_y + dt2*f_a[1:-1,j] ))		
 
-		# North Boundary 
-		j = Iy[-1]
+	# North Boundary 
+    	j = Iy[-1]
+ 
+	u_xqu_x = Cx2*( 0.5*( (q_a[2:,j]+q_a[1:-1,j] )*(u_1[2:,j]-u_1[1:-1,j])) \
+			-0.5*( (q_a[:-2,j]+q_a[1:-1,j] )*(u_1[1:-1,j]-u_1[:-2,j]) ))
 
-		u_xqu_x = Cx2*( 0.5*( (q(x[2:],y[j])+q(x[1:-1],y[j]) )*(u_1[2:,j]-u_1[1:-1,j])) \
-				-0.5*( (q(x[:-2],y[j])+q(x[1:-1],y[j]) )*(u_1[1:-1,j]-u_1[:-2,j]) ))
+      	u_yqu_y = Cy2*( 2*q_a[1:-1,j]*(u_1[1:-1,j-1]-u_1[1:-1,j]))
 
-		u_yqu_y = Cy2*( 2*q(x[1:-1],y[j])*(u_1[1:-1,j-1]-u_1[1:-1,j]))
+     	u[1:-1,j] = (1/A) *( (2/R1)*u_1[1:-1,j] +B*(R2/R1)*u_2[1:-1,j]  - C*(R2/R1)*dt*V(x[1:-1], y[j]) +(1/R1)*(u_xqu_x +\
+			u_yqu_y + dt2*f_a[1:-1,j] ))		
+		
+	# West Boundary
+    	i = Ix[0]
+  
+	u_xqu_x = Cx2*( 2*q_a[i,1:-1]*(u_1[i+1,1:-1]-u_1[i,1:-1]))
 
-		u[1:-1,j] = (1/A) *( (2/R1)*u_1[1:-1,j] +B*(R2/R1)*u_2[1:-1,j]  - C*(R2/R1)*dt*V(x[1:-1], y[j]) +(1/R1)*(u_xqu_x +\
-								u_yqu_y + dt2*f_a[1:-1,j] ))		
+      	u_yqu_y =Cy2*( 0.5*( (q_a[i,2:]+ q_a[i,1:-1] ) * (u_1[i,2:]-u_1[i,1:-1]) ) \
+			-0.5*( (q_a[i,:-2]+ q_a[i,1:-1] ) * (u_1[i,1:-1]-u_1[i,:-2]) ))
 
-		# West Boundary
-		i = Ix[0]
+      	u[i,1:-1] = (1/A) *( (2/R1)*u_1[i,1:-1] +B*(R2/R1)*u_2[i,1:-1]  - C*(R2/R1)*dt*V(x[i], y[1:-1]) +(1/R1)*(u_xqu_x +\
+			u_yqu_y + dt2*f_a[i,1:-1] ))
+	
+	# East Boundary
+    	i = Ix[-1]
+   
+	u_xqu_x = Cx2*( 2*q_a[i,1:-1]*(u_1[i-1,1:-1]-u_1[i,1:-1]))
 
-		u_xqu_x = Cx2*( 2*q(x[i],y[1:-1])*(u_1[i+1,1:-1]-u_1[i,1:-1]))
+      	u_yqu_y = Cy2*( 0.5*( (q_a[i,2:]+ q_a[i,1:-1] ) * (u_1[i,2:]-u_1[i,1:-1]) ) \
+			-0.5*( (q_a[i,:-2]+ q_a[i,1:-1] ) * (u_1[i,1:-1]-u_1[i,:-2]) ))
 
-		u_yqu_y =Cy2*( 0.5*( (q(x[i],y[2:])+ q(x[i],y[1:-1]) ) * (u_1[i,2:]-u_1[i,1:-1]) ) \
-				-0.5*( (q(x[i],y[:-2])+ q(x[i],y[1:-1]) ) * (u_1[i,1:-1]-u_1[i,:-2]) ))
+     	u[i,1:-1] = (1/A) *( (2/R1)*u_1[i,1:-1] +B*(R2/R1)*u_2[i,1:-1]  - C*(R2/R1)*dt*V(x[i], y[1:-1]) +(1/R1)*(u_xqu_x +\
+			u_yqu_y + dt2*f_a[i,1:-1] ))
+	
+	
+	# Corner Boundary
 
-		u[i,1:-1] = (1/A) *( (2/R1)*u_1[i,1:-1] +B*(R2/R1)*u_2[i,1:-1]  - C*(R2/R1)*dt*V(x[i], y[1:-1]) +(1/R1)*(u_xqu_x +\
-						u_yqu_y + dt2*f_a[i,1:-1] ))
+	# South-west boundary
+	j = Iy[0]
+    	i = Ix[0]	
+	u_xqu_x = Cx2*( 0.5*( (q_a[i+1,j]+q_a[i,j] )*(u_1[i+1,j]-u_1[i,j])) \
+				-0.5*( (q_a[i+1,j]+q_a[i,j] )*(u_1[i,j]-u_1[i+1,j]) ))
 
-		# East Boundary
-		i = Ix[-1]
+	u_yqu_y = Cy2*( 2*q_a[i,j]*(u_1[i,j+1]-u_1[i,j]) )
+ 
+	u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
+		         u_yqu_y + dt2*f_a[i,j] ))
 
-		u_xqu_x = Cx2*( 2*q(x[i],y[1:-1])*(u_1[i-1,1:-1]-u_1[i,1:-1]))
+	# North East Boundary
+	i = Ix[-1]
+    	j = Iy[-1]
+	u_xqu_x = Cx2*( 2*q_a[i,j]*(u_1[i-1,j]-u_1[i,j]))
 
-		u_yqu_y = Cy2*( 0.5*( (q(x[i],y[2:])+ q(x[i],y[1:-1]) ) * (u_1[i,2:]-u_1[i,1:-1]) ) \
-				-0.5*( (q(x[i],y[:-2])+ q(x[i],y[1:-1]) ) * (u_1[i,1:-1]-u_1[i,:-2]) ))
+        u_yqu_y = Cy2*( 0.5*( (q_a[i,j-1]+ q_a[i,j] ) * (u_1[i,j-1]-u_1[i,j]) ) \
+				 -0.5*( (q_a[i,j-1]+ q_a[i,j] ) * (u_1[i,j]-u_1[i,j-1]) ))
 
-		u[i,1:-1] = (1/A) *( (2/R1)*u_1[i,1:-1] +B*(R2/R1)*u_2[i,1:-1]  - C*(R2/R1)*dt*V(x[i], y[1:-1]) +(1/R1)*(u_xqu_x +\
-						u_yqu_y + dt2*f_a[i,1:-1] ))
+       	u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
+		u_yqu_y + dt2*f_a[i,j] ))
 
+	# South East Boundary
+	i = Ix[-1]
+	j = Iy[0]
+	u_xqu_x = Cx2*( 2*q_a[i,j]*(u_1[i-1,j]-u_1[i,j]))
 
-		# Corner Boundary
-		"""
-		j = 0
-		u[:,j] = 0
-		j = u.shape[1]-1
-		u[:,j] = 0
-		i = 0
-		u[i,:] = 0
-		i = u.shape[0]-1
-		u[i,:] = 0
-		"""
-		# South-west boundary
-		j = Iy[0]
-		i = Ix[0]	
-		u_xqu_x = Cx2*( 0.5*( (q(x[i+1],y[j])+q(x[i],y[j]) )*(u_1[i+1,j]-u_1[i,j])) \
-				-0.5*( (q(x[i+1],y[j])+q(x[i],y[j]) )*(u_1[i,j]-u_1[i+1,j]) ))
+        u_yqu_y = Cy2*( 0.5*( (q_a[i,j+1]+ q_a[i,j] ) * (u_1[i,j+1]-u_1[i,j]) ) \
+				 -0.5*( (q_a[i,j+1]+ q_a[i,j] ) * (u_1[i,j]-u_1[i,j+1]) ))
 
-		u_yqu_y = Cy2*( 2*q(x[i],y[j])*(u_1[i,j+1]-u_1[i,j]) )
+        u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
+		u_yqu_y + dt2*f_a[i,j] ))
+	
+	# North West Boundary
+	j = Iy[-1]
+	i = Ix[0]
+ 
+	u_xqu_x = Cx2*( 0.5*( (q_a[i+1,j]+q_a[i,j] )*(u_1[i+1,j]-u_1[i,j])) \
+				-0.5*( (q_a[i+1,j]+q_a[i,j] )*(u_1[i,j]-u_1[i+1,j]) ))
 
-		u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
-				u_yqu_y + dt2*f_a[i,j] ))
+        u_yqu_y = Cy2*( 2*q_a[i,j]*(u_1[i,j-1]-u_1[i,j]))
 
-		# North East Boundary
-		i = Ix[-1]
-		j = Iy[-1]
-		u_xqu_x = Cx2*( 2*q(x[i],y[j])*(u_1[i-1,j]-u_1[i,j]))
-
-		u_yqu_y = Cy2*( 0.5*( (q(x[i],y[j-1])+ q(x[i],y[j]) ) * (u_1[i,j-1]-u_1[i,j]) ) \
-				-0.5*( (q(x[i],y[j-1])+ q(x[i],y[j]) ) * (u_1[i,j]-u_1[i,j-1]) ))
-
-		u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
-				u_yqu_y + dt2*f_a[i,j] ))
-
-		# South East Boundary
-		i = Ix[-1]
-		j = Iy[0]
-		u_xqu_x = Cx2*( 2*q(x[i],y[j])*(u_1[i-1,j]-u_1[i,j]))
-
-		u_yqu_y = Cy2*( 0.5*( (q(x[i],y[j+1])+ q(x[i],y[j]) ) * (u_1[i,j+1]-u_1[i,j]) ) \
-						-0.5*( (q(x[i],y[j+1])+ q(x[i],y[j]) ) * (u_1[i,j]-u_1[i,j+1]) ))
-
-		u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
-								u_yqu_y + dt2*f_a[i,j] ))
-
-		# North West Boundary
-		j = Iy[-1]
-		i = Ix[0]
-
-		u_xqu_x = Cx2*( 0.5*( (q(x[i+1],y[j])+q(x[i],y[j]) )*(u_1[i+1,j]-u_1[i,j])) \
-				-0.5*( (q(x[i+1],y[j])+q(x[i],y[j]) )*(u_1[i,j]-u_1[i+1,j]) ))
-
-		u_yqu_y = Cy2*( 2*q(x[i],y[j])*(u_1[i,j-1]-u_1[i,j]))
-
-		u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
-				u_yqu_y + dt2*f_a[i,j] ))
-
-		return u
+	u[i,j] = (1/A) *( (2/R1)*u_1[i,j] +B*(R2/R1)*u_2[i,j]  - C*(R2/R1)*dt*V(x[i], y[j]) +(1/R1)*(u_xqu_x +\
+		u_yqu_y + dt2*f_a[i,j] ))
+	
+    	return u
 
 
-def plot_u(u, x, xv, y, yv, t, n,plot_method=2,save_plot=True):
+def plot_u(u, x, xv, y, yv, t, n,plot_method=2,save_plot=None):
 		if t[n] == 0:
-			time.sleep(2)
+			time.sleep(1)
 
 		if plot_method == 1:
-			mesh(x, y, u, title='t=%g' % t[n], zlim=[-1,1],	caxis=[-1,1])
+			mesh(x, y, u, title='t=%g' % t[n], zlim=[2,7],	caxis=[2,7])
 		elif plot_method == 2:
-			surfc(xv, yv, u, title='t=%g' % t[n], zlim=[-1, 1],colorbar=True, colormap=hot(), caxis=[-1,1],shading='flat')
+			surfc(xv, yv, u, title='t=%g' % t[n], zlim=[2, 7],colorbar=True, colormap=winter(), caxis=[2,7],shading='flat')
 
-		#if plot_method > 0:
-		#	time.sleep(0.001) # pause between frames
+		if plot_method > 0:
+			time.sleep(0.001) # pause between frames
 
 		if save_plot:
 			filename = 'tmp_%04d.png' % n
@@ -408,41 +402,41 @@ def plot_u(u, x, xv, y, yv, t, n,plot_method=2,save_plot=True):
 
 
 from scitools.std import *
-def run_Gaussian(plot_method=2, version='vectorized', save_plot=True):
+def run_Gaussian(plot_method=2, version='vectorized', save_plot=None):
 		"""
 		Initial Gaussian bell in the middle of the domain.
 		plot_method=1 applies mesh function, =2 means surf, =0 means no plot.
 		"""
 
-		# version='vectorized'
 		# Clean up plot files
 		for name in glob('tmp_*.png'):
 				os.remove(name)
 
-		Lx = 50
-		Ly = 50
-		b=0.1
+		Lx = 25
+		Ly = 25
+		b=0.3
 		dt=-1
 		c=1
 
 		def h(x,y):
-			B0=0.5;Ba=1.0;Bmx=10.0;Bmy=10.0;r=1;Bs=1.0
-			return B0+Ba*exp(-0.5*(x-Bmx/Bs)**2 - 0.5*(y-Bmy/r*Bs)**2)
+			B0=1;Ba=6;Bmx=5;Bmy=5;r=1;Bs=1.0
+			#return B0+Ba*cos(pi*(x-Bmx)/2*Bs)*cos(pi*(y-Bmy)/2*Bs)
+        		return B0+Ba*exp(-(x-Bmx/Bs)**2)# -(y-Bmy/r*Bs)**2)
 		def q(x, y):
 			return 9.81*h(x,y)	
-		def I(x, y):
-			"""Gaussian peak."""
-			Bmx=5.0;Bmy=5.0;b=1;Bs=1.0
-			return exp(-0.5*(x-Bmx/Bs)**2 - 0.5*(y-Bmy/b*Bs)**2)
+		
+    		def I(x, y):
+        		"""Gaussian peak."""
+			bmx=12;bmy=12;b=1;bs=1.0;B0=5
+        		return B0+2*exp(-0.5*(x-bmx/bs)**2 - 0.5*(y-bmy/b*bs)**2)
 		def V(x,y):
-				return 0
+			return 0
 
 		#plot_u(b, q, u, x, xv, y, yv, t, n,plot_method)
 
-		Nx = 50; Ny = 50; T = 50
-		u, x, dt, cpu = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=plot_u, version=version)
+		Nx = 50; Ny = 50; T = 15
+		u, x, dt, cpu,max_E = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=plot_u, version=version)
 		return cpu,dt
-
 
 import nose.tools as nt
 
@@ -588,10 +582,10 @@ def exact_solution_undamped():
 
 if __name__ == '__main__':
 	#test_constant()
-	#cpu, dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
+	cpu, dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
 	#print dt
 	#cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
-	#run_efficiency_tests(nrefinements=4)
+	
 	#dt, cpu = pulse2()
 	#pulse2()
-	dt = exact_solution_undamped()
+	#dt = exact_solution_undamped()
