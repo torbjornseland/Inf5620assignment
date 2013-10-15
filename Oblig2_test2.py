@@ -631,13 +631,62 @@ def exact_solution_undamped():
 			print "C=",err_max[i]/float(h**2)
 			print "diff_err=",(err_max[i]/float(H_values[i]**2))-(err_max[i-1]/float(H_values[i-1]**2))
 
-	print 
+	
+	
+def exact_solution_damped():
+		
+	Lx = 2; Ly = 2
+	#Nx = 4; Ny = 4
+    	#dt = -1 # use longest possible steps
+    	T = 1; b = 0.3
+
+	def exact_solution(x, y, t):			 
+		return  (A*cos(w*t)+B*sin(w*t))*exp(-c*t) *cos(k_x*x)*cos(k_y*y)
+
+	def I(x,y):
+		return 	exact_solution(x, y, 0)	
+	def V(x,y):
+		return (-A*c*cos(0) - A*w*sin(0) - B*c*sin(0) + B*w*cos(0))*exp(0)*cos(k_x*x)*cos(k_y*y)
+	def q(x,y):
+		return 0.1
+	c=b/2.0	
+	A = 2.5; mx = 3.0; my = 2.0
+	
+	k_x = (mx*pi)/Lx; k_y = (my*pi)/Ly
+	w = sqrt(q(0,0)*((k_x)**2 + (k_y)**2)-c**2)	
+	B=A*c/w		
+		
+
+	H_values = [0.5,0.3,0.2, 0.15 ,0.1,0.05,0.01,0.005]
+	err_max = ones(len(H_values))*-1
+	for i in range(len(H_values)):
+		print "----------------"
+		h = H_values[i]
+		Nx = int(round(Lx/h))
+		Ny = int(round(Lx/h))
+		dt = h/2.
+		
+		def assert_no_error(b, q, u, x, xv, y, yv, t, n):			
+			u_e = exact_solution(xv, yv, t[n])
+			diff = abs(u - u_e).max()	
+			if diff > err_max[i] or err_max[i]==-1:
+				err_max[i] = diff 
+			
+		
+		u, x, dt, cpu = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt,\
+			 T,user_action=assert_no_error, version='vectorized',exact='ok')
+		if i>0:
+			print "C=",err_max[i]/float(h**2)
+			print "diff_err=",(err_max[i]/float(H_values[i]**2))-(err_max[i-1]/float(H_values[i-1]**2))
+
+	
 	
 
 
 
 if __name__ == '__main__':
-	exact_solution_undamped()
+	exact_solution_damped()
+	#exact_solution_undamped()
 	#test_plug()
 	#pulse2(animate=True,version='vectorized',T=2,loc='center',sigma = 0.5,plot_method=2,save_plot=True)
 	#test_constant()
