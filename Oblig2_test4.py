@@ -590,13 +590,8 @@ def exact_solution_undamped():
 
 if __name__ == '__main__':
 	#test_constant()
-	cpu, dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
+	#cpu, dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
 	#print dt
-<<<<<<< HEAD
-=======
-
-	#cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
->>>>>>> f8a94c2dcff7e32ab000998da58c4ef0aaddefb0
 	#cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
 	#run_efficiency_tests(nrefinements=4)
 	#dt, cpu = pulse2()
