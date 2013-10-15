@@ -61,6 +61,13 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		u_1 = zeros((Nx+1,Ny+1), order=order) # solution at t-dt
 		u_2 = zeros((Nx+1,Ny+1), order=order) # solution at t-2*dt
 		f_a = zeros((Nx+1,Ny+1), order=order) # for compiled loops
+
+		#Ghost
+		u_g = zeros((Nx+3,Ny+3), order=order) # solution array
+		u_1_g = zeros((Nx+3,Ny+3), order=order) # solution at t-dt
+		u_2_g = zeros((Nx+3,Ny+3), order=order) # solution at t-2*dt
+		f_a_g = zeros((Nx+3,Ny+3), order=order) # for compiled loops
+		
 		
 		#Exact solution
 		max_E = 0
@@ -130,7 +137,7 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 					
 
 				u_2[:,:], u_1[:,:] = u_1, u
-				if max_E==None or max_E < abs(u[:,:]-u_e[:,:]).max():
+				if max_E==None or max_E < abs(u[0,0]-u_e[0,0]).max():
 						max_E = abs(u-u_e).max()
 		else:			
 			for n in It[1:-1]:
@@ -271,10 +278,25 @@ def advance_scalar(Nx, Ny, b, q, u, u_1, u_2, f, x, y, t, n, Cx2, Cy2, dt,V, ste
 
 		return u
 
-def advance_vectorized(x, y, b, q, u, u_1, u_2, f_a, Cx2, Cy2, dt,V, step1=False):
+def advance_vectorized(x, y, b, q, u, u_1, u_2, f_a, Cx2, Cy2, dt,V, step1=False):#,u_g, u_1_g, u_2_g):
+		"""
+		#Copy to ghostblock
+		u_g[1:-1,1:-1] = u
+		u_1_g[1:-1,1:-1] = u_1
+		u_2_g[1:-1,1:-1] = u_2
+
+		#Add ghostcells on south
+		u_g[1:-1,0] = u[1:-1,1]
+		u_1_g[1:-1,0] = u_1[1:-1,1]
+		u_2_g[1:-1,0] = u_2[1:-1,1]
+		"""	
+		
+
+
+
 		Ix = range(0, u.shape[0]); Iy = range(0, u.shape[1])
 		dt2 = dt**2
-		R1=(1+(b*dt/2.0)); R2=((b*dt/2.0) -1)
+		R1=1./(1+(b*dt/2.0)); R2=((b*dt/2.0) -1)	#Feil 1
 		if step1:
 			A = (1-(R2/R1)); B = 0.0 ; C = 2.0
 
@@ -552,7 +574,7 @@ def exact_solution_undamped():
 		Lx = 50
 		Ly = 50
 
-		T = 5
+		T = 2
 
 
 	
@@ -580,9 +602,10 @@ def exact_solution_undamped():
 			Nx = int(round(Lx/h))
 			Ny = int(round(Lx/h))
 			dt = h/2.
-			u_v,x, dt, cpu,max_v = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='vectorized',exact='ok')
-			print "err",max_v
-			print "C",max_v/float(h)
+			#T = 3*dt
+			u_v,x, dt, cpu,max_v = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=plot_u, version='vectorized',exact='ok')
+			#print "err",max_v
+			print "C",max_v/float(h**2)
 			
 
 		return dt
