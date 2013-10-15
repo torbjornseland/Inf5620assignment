@@ -16,7 +16,6 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		y = linspace(0, Ly, Ny+1) # mesh points in y dir
 		dx = x[1] - x[0]
 		dy = y[1] - y[0]
-		print dx
 
 		xv = x[:,newaxis] # for vectorized function evaluations
 		yv = y[newaxis,:]
@@ -32,14 +31,14 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		
 		#Stability limit
 		stability_limit = (1/float(c))*(1/sqrt(1/dx**2 + 1/dy**2))
+		#print "stab_limit", stability_limit
 		if plug=='ok':
 			dt = dx/q(0,0)
-		elif dt <= 0: # max time step?
-			if dt <= 0:
-				safety_factor = -dt # use negative dt as safety factor
-				dt = safety_factor*stability_limit
-			elif dt > stability_limit:
-				print 'error: dt=%g exceeds the stability limit %g' % (dt, stability_limit)
+		elif dt <= 0:
+			safety_factor = -dt # use negative dt as safety factor
+			dt = safety_factor*stability_limit
+		elif dt > stability_limit:
+			print 'error: dt=%g exceeds the stability limit %g' % (dt, stability_limit)
 
 
 		Nt = int(round(T/float(dt)))
@@ -66,12 +65,13 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		#Exact solution
 		max_E = 0
 		if exact=='ok':
-			A = 1
-			mx = 3
-			my = 3
+			
+			A = 2.5
+			mx = 3.
+			my = 2.
+			w = sqrt(q(0,0)*((mx*pi/Lx)**2 + (my*pi/Ly)**2))
 			k_x = (mx*pi)/Lx
 			k_y = (my*pi)/Ly	
-			w = sqrt(q(0,0)*(k_x**2+k_y**2))
 			u_e = zeros((Nx+1,Ny+1), order='C') # solution array
 			max_E = None
 	
@@ -102,6 +102,10 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		else: # use vectorized version
 			f_a[:,:] = f(xv, yv, t[n]) # precompute, size as u
 			u = advance(x,y,b,q,u, u_1, u_2, f_a, Cx2, Cy2, dt, V, step1=True)
+			u_e[:,:] = A*cos(k_x*xv)*cos(k_y*yv)*cos(w*t[1])
+			
+			if max_E==None or max_E < abs(u[:,:]-u_e[:,:]).max():
+				max_E = abs(u-u_e).max()
 
 		if user_action is not None:
 			user_action(u, x, xv, y, yv, t, 1)
@@ -120,13 +124,13 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 					u = advance(x,y,b,q,u, u_1, u_2, f_a, Cx2, Cy2, dt,V)
 					
 					
-					if user_action is not None:
-						if user_action(u, x, xv, y, yv, t, n+1):
-							break
+				if user_action is not None:
+					if user_action(u_e, x, xv, y, yv, t, n+1):
+						break
 					
 
-					u_2[:,:], u_1[:,:] = u_1, u
-				if max_E==None or max_E < abs(u[2:-2,2:-2]-u_e[2:-2,2:-2]).max():
+				u_2[:,:], u_1[:,:] = u_1, u
+				if max_E==None or max_E < abs(u[:,:]-u_e[:,:]).max():
 						max_E = abs(u-u_e).max()
 		else:			
 			for n in It[1:-1]:
@@ -141,7 +145,7 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 					if user_action(u, x, xv, y, yv, t, n+1):
 						break
 
-					u_2[:,:], u_1[:,:] = u_1, u
+				u_2[:,:], u_1[:,:] = u_1, u
 
 		t1 = time.clock()
 		# dt might be computed in this function so return the value
@@ -547,45 +551,42 @@ def exact_solution_undamped():
 		
 		Lx = 50
 		Ly = 50
-		Nx = 100
-		Ny = 100
 
-		dt = -1
 		T = 5
 
 
-		A = 1
-		mx = 3
-		my = 3
-		w = 0.8
-		k_x = (mx*pi)/Lx
-		k_y = (my*pi)/Ly
-		
-		b = 0
-		c_0 = 0.1
-		print "c_0",c_0
+	
 		def I(x,y):
 			return A*cos(k_x*x)*cos(k_y*y)*cos(0)
 		
 		def V(x,y):
 			return -w*A*cos(k_x*x)*cos(k_y*y)*sin(0)
 
-		def c(x,y):
-			return c_0
-		
-		H_values = [0.2,0.1,0.05,0.01]#,2000]
+		def q(x,y):
+			return 0.1
+	
+		A = 2.5
+		mx = 3.
+		my = 2.
+		w = sqrt(q(0,0)*((mx*pi/Lx)**2 + (my*pi/Ly)**2))	
+		k_x = (mx*pi)/Lx
+		k_y = (my*pi)/Ly	
+		b = 0	
 
+		H_values = [0.2,0.1,0.09,0.08,0.07,0.06,0.05,0.04,0.03,0.02,0.01]
+		Max_list = []
 		for h in H_values:
 			print "----------------"
-			Nxy = int(Lx/h)
-			dt = h/sqrt(2*c_0)
-			u,x, dt, cpu,max_E = solver(b, c, I, V, None, Lx, Ly, Nxy, Nxy, dt, T,user_action=None, version='vectorized',exact='ok')
-			print "C", max_E/float(h)
-			print "dt", dt
-			print "max",max_E
-		
+			Nx = int(round(Lx/h))
+			Ny = int(round(Lx/h))
+			dt = h/2.
+			u_v,x, dt, cpu,max_v = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='vectorized',exact='ok')
+			print "err",max_v
+			print "C",max_v/float(h)
+			
 
 		return dt
+
 
 
 
@@ -593,8 +594,8 @@ if __name__ == '__main__':
 	#test_constant()
 	#cpu, dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
 	#print dt
-	cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
+	#cpu=run_Gaussian(plot_method=2, version='scalar', save_plot=True)
 	#run_efficiency_tests(nrefinements=4)
 	#dt, cpu = pulse2()
 	#pulse2()
-	#dt = exact_solution_undamped()
+	dt = exact_solution_undamped()
