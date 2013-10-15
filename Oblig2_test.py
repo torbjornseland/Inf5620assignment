@@ -610,11 +610,12 @@ def exact_solution_undamped():
 		
 
 	#H_values = [0.5,0.3,0.2, 0.15 ,0.1]
-	H_values =[0.5,0.4,0.05]#,0.01]
+	H_values = [1]#,0.4,0.05]#,0.01]
 	
-	
+	Eh=[]
+	#12.3611413172
 	for h in H_values:
-		#print "----------------"
+		print "----------------"
 		Nx = int(round(Lx/h))
 		Ny = int(round(Lx/h))
 		dt = h/2.
@@ -622,13 +623,15 @@ def exact_solution_undamped():
 		def assert_no_error(b, q, u, x, xv, y, yv, t, n):			
 			u_e = exact_solution(xv, yv, t[n])
 			diff = abs(u - u_e).max()	
-			
-			
+			#surf(u-u_e)
+			#time.sleep(0.1)
+			#print diff,n
+			Eh.append(diff)
 			
 		
 		u, x, dt, cpu = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt,\
 			 T,user_action=assert_no_error, version='vectorized',exact='ok')
-	
+	print max(Eh)/dt**2
 		
 
 
