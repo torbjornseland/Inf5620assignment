@@ -27,7 +27,7 @@ compute errors, etc.
 import time
 from numpy import *
 
-def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scalar',plug='no',exact='no'):
+def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scalar',plug='no',exact='no',makeplot=None):
 	if version == 'vectorized':
         	advance = advance_vectorized
     	else: 
@@ -54,11 +54,10 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 	else:
 		c=sqrt(q(x,y))
 	
-	"""
+	
 	#Stability limit
 	stability_limit = (1/float(c))*(1/sqrt(1/dx**2 + 1/dy**2))
 	
-	#print "stab_limit", stability_limit
 	if plug=='ok':
 		dt = dx/q(0,0)
 	elif dt <= 0:
@@ -68,7 +67,7 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 		print 'error: dt=%g exceeds the stability limit %g' % (dt, stability_limit)
 
 	
-	"""
+	
     	Nt = int(round(T/float(dt)))
     	t = linspace(0, Nt*dt, Nt+1) # mesh points in time
 	
@@ -88,6 +87,7 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
     	u   = zeros((Nx+1,Ny+1)) # solution array
     	u_1 = zeros((Nx+1,Ny+1)) # solution at t-dt
     	u_2 = zeros((Nx+1,Ny+1)) # solution at t-2*dt
+    	u_start = zeros((Nx+1,Ny+1)) # solution at t-2*dt
     	f_a = zeros((Nx+1,Ny+1)) # for compiled loops
 	q_a = zeros((Nx+1,Ny+1)) # for compiled loops
 	V_a = zeros((Nx+1,Ny+1)) # for compiled loops
@@ -99,7 +99,7 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
     	import time; t0 = time.clock() # for measuring CPU time
 	
     	# Load initial condition into u_1
-    	if version == 'scalar':
+    	if version == 'scalar' or plug=='ok':
         	for i in Ix:
             		for j in Iy:
                 		u_1[i,j] = I(x[i], y[j])
@@ -108,6 +108,10 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
 	
     	if user_action is not None:
         	user_action(b, q, u_1, x, xv, y, yv, t, 0)
+
+	if makeplot is not None:
+		makeplot(u_1, x, xv, y, yv, t, 0,plot_method=2,save_plot=None)
+		u_start[:,:] = u_1
 
     	# Special formula for first time step
     	n = 0
@@ -124,6 +128,9 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
     	if user_action is not None:
         	user_action(b, q, u, x, xv, y, yv, t, 1)
 
+	if makeplot is not None:
+		makeplot(u, x, xv, y, yv, t, 1,plot_method=2,save_plot=None)
+
     	u_2[:,:] = u_1; u_1[:,:] = u
 
     	for n in It[1:-1]:
@@ -139,6 +146,13 @@ def solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scala
         	if user_action is not None:
             		if user_action(b, q, u, x, xv, y, yv, t, n+1):
                 		break
+
+		if makeplot is not None:
+			if makeplot(u, x, xv, y, yv, t, n,plot_method=2,save_plot=None):
+				break
+
+		if abs(u_start-u).max()==0:
+			print "T", dt*n
 
         	u_2[:,:], u_1[:,:] = u_1, u
 
@@ -524,42 +538,25 @@ def test_qubic():
        
         dt, cpu = solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=assert_no_error,version=version)
 
-def test_plug():
-	#Check that an initial plug is correct back after one period.
-	def I(x,y):
-		
-		if abs(x-Lx/2.0)>0.1:
-			return 0
-		else:
-			return 1
-	
-	#I = lambda x,y: 0 if abs(x-Lx/2.0) > 0.1 else 1
-	Ly = 1; Lx = 1
-	Nx = 20; Ny = 20
-	b = 0
-	dt = -1
-	c_0 = 1.0
-	T = 4
+def plotter(u, x, xv, y, yv, t, n,plot_method=2,save_plot=None):
+		if t[n] == 0:
+			time.sleep(1)
 
-	def V(x,y):
-		return 0	
-	def c(x,y):
-		return c_0
+		if plot_method == 1:
+			mesh(x, y, u, title='t=%g' % t[n], zlim=[2,7],	caxis=[2,7])
+		elif plot_method == 2:
+			surfc(xv, yv, u, title='t=%g' % t[n], zlim=[0, 2],colorbar=True, colormap=winter(), caxis=[0,2],shading='flat')
 
-	u_s, x, dt, cpu = solver(b, c, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='scalar',plug='ok')
+		if plot_method > 0:
+			time.sleep(0.001) # pause between frames
 
-	#u_v, x, dt, cpu = solver(b, c, I, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None, version='vectorized',plug='ok')
-
-	#diff = abs(u_s - u_v).max()
-	#print "diff",diff
-	#nt.assert_almost_equal(diff, 0, places=13)
-	#u_0 = array([I(x_,0) for x_ in x])
-	#diff = abs(u_s - u_0).max()
-	#print "diff2",diff
-	#nt.assert_almost_equal(diff, 0, places=13)
+		if save_plot:
+			filename = 'tmp_%04d.png' % n
+			#savefig(filename) # time consuming!
 
 
-def pulse2(animate=True,version='vectorized',T=2,loc='center',sigma = 0.5,plot_method=2,save_plot=True):
+
+def test_plug(loc='center',sigma = 0.5):
 
 	Lx = 10
 	Ly = 10
@@ -567,26 +564,54 @@ def pulse2(animate=True,version='vectorized',T=2,loc='center',sigma = 0.5,plot_m
 	Ny = 100
 	b = 0
 	dt = -1
-	c_0 = 1.0
+	c_0 = 1
+	T = 10
 	if loc == 'center':
 		xc = Lx/2
 	elif loc == 'left':
 		xc = 0
-	def I(x, y): 
-		return x #0 if abs(x-xc) > sigma else 1
+	def I_x(x, y):
+		 return 0 if abs(x-xc) > sigma else 1
 	def V(x,y):
 		return 0	
 	def c(x,y):
 		return c_0
 
+	u_v, x, dt, max_E = solver(b, c, I_x, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None,version='vectorized',plug='ok',makeplot=None)
+	u_s, x, dt, max_E = solver(b, c, I_x, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None,version='scalar',plug='ok',makeplot=None)
+	
+	diff = abs(u_s - u_v).max()
+	nt.assert_almost_equal(diff, 0, places=13)
+	u_0 = array([I_x(x_,0) for x_ in x])
+	diff = abs(u_v[:,0] - u_0).max()
+	nt.assert_almost_equal(diff, 0, places=13)
 
-	#plot_u(b, q, u, x, xv, y, yv, t, n,plot_method)
+	#Test for y-axis
+	if loc == 'center':
+		yc = Ly/2
+	elif loc == 'left':
+		yc = 0
+	def I_y(x, y):
+		 return 0 if abs(y-yc) > sigma else 1
 
-	#u, x, dt, t1 - t0,max_E = solver(b, q, I, V, f, Lx, Ly, Nx, Ny, dt, T,user_action=None,\
-		# version='scalar',plug='no',exact='no')
-	#return dt,cpu
+	u_v, x, dt, max_E = solver(b, c, I_y, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None,version='vectorized',plug='ok',makeplot=None)
+	u_s, x, dt, max_E = solver(b, c, I_y, V, None, Lx, Ly, Nx, Ny, dt, T,user_action=None,version='scalar',plug='ok',makeplot=None)
+	
+	diff = abs(u_s - u_v).max()
+	nt.assert_almost_equal(diff, 0, places=13)
+	u_0 = array([I_y(0,y_) for y_ in x])		#Here I'm using x instead of y since they are similar
+	diff = abs(u_v[0,:] - u_0).max()
+	nt.assert_almost_equal(diff, 0, places=13)
 
-def exact_solution_undamped():
+
+
+	
+
+	
+
+	
+
+def test_exact_solution_undamped():
 		
 	Lx = 2; Ly = 2
 	#Nx = 4; Ny = 4
@@ -627,13 +652,14 @@ def exact_solution_undamped():
 		
 		u, x, dt, cpu = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt,\
 			 T,user_action=assert_no_error, version='vectorized',exact='ok')
-		if i>0:
-			print "C=",err_max[i]/float(h**2)
-			print "diff_err=",(err_max[i]/float(H_values[i]**2))-(err_max[i-1]/float(H_values[i-1]**2))
-
+		#if i>0:
+			#print "C=",err_max[i]/float(h**2)
+			#print "diff_err=",(err_max[i]/float(H_values[i]**2))-(err_max[i-1]/float(H_values[i-1]**2))
+	diff_err = (err_max[-1]/float(H_values[-1]**2))-(err_max[-2]/float(H_values[-2]**2))
+	nt.assert_almost_equal(diff_err, 0, places=2)
 	
 	
-def exact_solution_damped():
+def test_exact_solution_damped():
 		
 	Lx = 2; Ly = 2
 	#Nx = 4; Ny = 4
@@ -660,7 +686,7 @@ def exact_solution_damped():
 	H_values = [0.5,0.3,0.2, 0.15 ,0.1,0.05,0.01,0.005]
 	err_max = ones(len(H_values))*-1
 	for i in range(len(H_values)):
-		print "----------------"
+		#print "----------------"
 		h = H_values[i]
 		Nx = int(round(Lx/h))
 		Ny = int(round(Lx/h))
@@ -675,20 +701,20 @@ def exact_solution_damped():
 		
 		u, x, dt, cpu = solver(b, q, I, V, None, Lx, Ly, Nx, Ny, dt,\
 			 T,user_action=assert_no_error, version='vectorized',exact='ok')
-		if i>0:
-			print "C=",err_max[i]/float(h**2)
-			print "diff_err=",(err_max[i]/float(H_values[i]**2))-(err_max[i-1]/float(H_values[i-1]**2))
-
-	
-	
+		#if i>0:
+			#print "C=",err_max[i]/float(h**2)
+			#print "diff_err=",(err_max[i]/float(H_values[i]**2))-(err_max[i-1]/float(H_values[i-1]**2))
+		
+	diff_err = (err_max[-1]/float(H_values[-1]**2))-(err_max[-2]/float(H_values[-2]**2))
+	nt.assert_almost_equal(diff_err, 0, places=2)
 
 
 
 if __name__ == '__main__':
-	exact_solution_damped()
-	#exact_solution_undamped()
+	test_exact_solution_damped()
+	#test_exact_solution_undamped()
 	#test_plug()
-	#pulse2(animate=True,version='vectorized',T=2,loc='center',sigma = 0.5,plot_method=2,save_plot=True)
+	#test_plug(loc='center',sigma = 0.5)
 	#test_constant()
 	#cpu,dt=run_Gaussian(plot_method=2, version='vectorized', save_plot=True)
 	#test_qubic()

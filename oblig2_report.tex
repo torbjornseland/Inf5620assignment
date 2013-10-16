@@ -1,0 +1,257 @@
+\documentclass[norsk,11pt,a4paper]{article}
+
+
+\usepackage[norsk]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+\begin{document}
+
+\title{Second Compulsory,INF5620}
+\author{Trond Svandal og Torbjørn Seland}
+\maketitle
+
+\section*{Mathematical problem}
+
+\begin{equation}
+\frac{\partial^2 u}{\partial t^2} + b \frac{\partial u}{\partial t} = \frac{\partial}{\partial x}\left(q(x,y)\frac{\partial u}{\partial x}\right)+ \frac{\partial}{\partial y}\left(q(x,y)\frac{\partial u}{\partial y}\right)+ f(x,y,t)
+\end{equation}
+
+And the bounary condition:
+
+\begin{equation}
+\frac{\partial u}{\partial n} = 0
+\end{equation}
+
+Where $\Omega = [0,L_x]\times [0,L_y]$
+
+
+The initial conditions are
+\begin{equation}
+	\begin{aligned}
+	u(x,y,0) = I(x,y) \\
+	u_t(x,y,0) = V(x,y)
+	\end{aligned}
+\end{equation}
+
+\section*{Discretization}
+Derive the discrete set of equations to be implemented in a program
+\subsection*{General scheme}
+
+\begin{equation}\label{eq:boundary_conditions}
+\begin{aligned}
+W = \frac{\partial u}{\partial n}\mid_{x=0} \simeq \frac{u^n_{0,j+1}-u^n_{0,j-1}}{2\Delta x} = 0 \\
+E = \frac{\partial u}{\partial n}\mid_{x=L_x} \simeq \frac{u^n_{L_x,j+1}-u^n_{L_x,j-1}}{2\Delta x} = 0 \\
+N = \frac{\partial u}{\partial n}\mid_{y=0} \simeq \frac{u^n_{j+1,0}-u^n_{j-1,0}}{2\Delta y} = 0 \\
+S = \frac{\partial u}{\partial n}\mid_{y=L_y} \simeq \frac{u^n_{i+1,L_y}-u^n_{j-1,L_y}}{2\Delta y} = 0
+\end{aligned}
+\end{equation}
+
+Working with the equation on the right side
+\begin{equation}
+\begin{aligned}
+ \frac{\partial}{\partial x}\left(q(x,y)\frac{\partial u}{\partial x}\right)+ \frac{\partial}{\partial y}\left(q(x,y)\frac{\partial u}{\partial y}\right)\\
+\simeq \frac{q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})}{\Delta x^2}\\
++ \frac{q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})}{\Delta y^2}
+\end{aligned}
+\end{equation}
+
+Discretication of the whole equation
+\begin{equation}
+[D_tD_tu]^n_{i,j} + [bD_{2t}]^n_{i,j} = [D_xqD_xu]^n_{i,j} + [D_yqD_yu]^n_{i,j} + f^n_{i,j}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+\frac{u^{n+1}_{i,j}-2u^{n}_{i,j}+u^{n-1}_{i,j}}{\Delta t^2} + b\frac{u^{n+1}_{i,j}-u^{n-1}_{i,j}}{2\Delta t} =  \\
+\frac{q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})}{\Delta x^2} \\
++ \frac{q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})}{\Delta y^2} + f^n_{i,j}
+\end{aligned}
+\end{equation}
+If we then put $u^{n+1}_{i,j}$ on the left side, we get the equation:
+\begin{equation}
+\begin{aligned}
+u^{n+1}_{i,j} = \frac{1}{1+\frac{b\Delta t}{2}}\left[ 2u^n_{i,j}+(\frac{b\Delta t}{2}-1)u^{n-1}_{i,j} + \right.\\
+\left.\Delta t^2\left(\frac{q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})}{\Delta x^2}\right.\right. \\
++ \left.\left.\frac{q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})}{\Delta y^2} + f^n_{i,j}\right)\right]
+\end{aligned}
+\end{equation}
+To make this equation cleaner and easier to read, we put in som constants for some of the equations.
+\begin{equation}
+\begin{aligned}
+Cx2 = \left(\frac{\Delta t}{\Delta x}\right)^2 \\
+Cy2 = \left(\frac{\Delta t}{\Delta y}\right)^2 \\
+R1 = \frac{1}{1+\frac{b \Delta t}{2}} \\
+R2 = \frac{b \Delta t}{2} - 1 \\
+dt2 = \Delta t^2
+\end{aligned}
+\end{equation}
+
+Then the equation will look like this:
+
+\begin{equation} \label{eq:general}
+\begin{aligned}
+u^{n+1}_{i,j} = R1\left[ 2u^n_{i,j}+R2u^{n-1}_{i,j} + \right.\\
+\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right. \\
++ \left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]
+\end{aligned}
+\end{equation}
+
+But we are not able to use this on the edges
+\subsection*{First step}
+The challenge her is that we only have the values for one step earlier. Since our equation demands
+values from two step earlier, we have to rewrite the equation.
+
+We use the initial conditions
+\begin{equation}
+	\begin{aligned}
+	u(x,y,0) = I(x,y) \simeq u^0_{i,j} = I_{i,j}\\
+	u_t(x,y,0) = V(x,y) \simeq \frac{u^{n+1}_{i,j}-u^{n-1}_{i,j}}{2\Delta x} = V_{i,j}, n=0 \\
+	u^{n-1}_{i,j} = u^{n+1}-2\Delta t V_{i,j}\\
+	n = 0
+	\end{aligned}
+\end{equation}
+
+Since we now have an expression for $u^{n-1}_{i,j}$, we can just put this in to equation (\ref{eq:general})
+
+\begin{equation}\label{eq:first_step}
+\begin{aligned}
+u^{n+1}_{i,j} = R1\left[ 2u^n_{i,j}+R2(u^{n+1}-2\Delta t V_{i,j})+ \right.\\
+\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right. \\
++ \left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\\
+\\
+u^{n+1}_{i,j}(1-R1R2) = R1\left[ 2u^n_{i,j}-R2*2\Delta t V_{i,j}+ \right.\\
+\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right. \\
++ \left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\\
+\\
+u^{n+1}_{i,j}= \left(R1\left[ 2u^n_{i,j}-R2*2\Delta t V_{i,j}+ \right.\right.\\
+\left.\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right.\right. \\
++ \left.\left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\right)/(1-R1R2)
+\end{aligned}
+\end{equation}
+
+And this we can use for the first step.
+
+\subsection*{Boundary poins}
+Here we have to use the Boundary conditions from (\ref{eq:boundary_conditions}). Then we will get
+\begin{equation}
+\begin{aligned}
+W \Rightarrow u^{n}_{i+1,j} = u^{n}_{i-1,j},i=0\\
+E \Rightarrow u^{n}_{i+1,j} = u^{n}_{i-1,j},i=N_x\\
+N \Rightarrow u^{n}_{i,j+1} = u^{n}_{i,j-1},i=0\\
+S \Rightarrow u^{n}_{i,j+1} = u^{n}_{i,j-1},i=N_y\\
+\end{aligned}
+\end{equation}
+ And we use eq(\ref{eq:general}) and put in these values
+\subsubsection*{West}
+\begin{equation}\label{eq:west_general}
+\begin{aligned}
+q_{i+\frac{1}{2},j}+q_{i-\frac{1}{2},j}= 2q_{i,j}\\
+\\
+u^{n+1}_{i,j} = R1\left[ 2u^n_{i,j}+R2u^{n-1}_{i,j} + Cx2\left(2q_{i,j}(u^n_{i+1,j}-u^n_{i,j})\right)\right. \\
++ \left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\\
+\end{aligned}
+\end{equation}
+
+
+\subsubsection*{East}
+
+\begin{equation}\label{eq:east_general}
+\begin{aligned}
+u^{n+1}_{i,j} = R1\left[ 2u^n_{i,j}+R2u^{n-1}_{i,j} + Cx2\left(2q_{i,j}(u^n_{i-1,j}-u^n_{i,j})\right)\right. \\
++ \left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\\
+\end{aligned}
+\end{equation}
+
+\subsubsection*{North}
+
+\begin{equation}\label{eq:north_general}
+\begin{aligned}
+u^{n+1}_{i,j} = R1\left[ 2u^n_{i,j}+R2u^{n-1}_{i,j} + \right.\\
+\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right. \\
++ \left.Cy2\left(2q_{i,j}(u^n_{i,j+1}-u^n_{i,j})\right) + dt2 f^n_{i,j}\right]\\
+\end{aligned}
+\end{equation}
+
+\subsubsection*{South}
+
+\begin{equation}\label{eq:south_general}
+\begin{aligned}
+u^{n+1}_{i,j} = R1\left[ 2u^n_{i,j}+R2u^{n-1}_{i,j} + \right.\\
+\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right. \\
++ \left.Cy2\left(2q_{i,j}(u^n_{i,j-1}-u^n_{i,j})\right) + dt2 f^n_{i,j}\right]\\
+\end{aligned}
+\end{equation}
+
+\subsection*{All directions in the first step}
+\subsubsection*{West}
+Here we use equation(\ref{eq:first_step}) with the same method as over.
+\begin{equation}
+\begin{aligned}
+u^{n+1}_{i,j}= \left(R1\left[ 2u^n_{i,j}-R2*2\Delta t V_{i,j}+Cx2\left(2q_{i,j}(u^n_{i+1,j}-u^n_{i,j})\right)\right.\right. \\
++ \left.\left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\right)/(1-R1R2)
+\end{aligned}
+\end{equation}
+
+\subsubsection*{East}
+\begin{equation}
+\begin{aligned}
+u^{n+1}_{i,j}= \left(R1\left[ 2u^n_{i,j}-R2*2\Delta t V_{i,j}+Cx2\left(2q_{i,j}(u^n_{i-1,j}-u^n_{i,j})\right)\right.\right. \\
++ \left.\left.Cy2\left(q_{i,j+\frac{1}{2}}(u^n_{i,j+1}-u^n_{i,j})-q_{i,j-\frac{1}{2}}(u^n_{i,j}-u^n_{i,j-1})\right) + dt2 f^n_{i,j}\right]\right)/(1-R1R2)
+\end{aligned}
+\end{equation}
+
+\subsubsection*{North}
+\begin{equation}
+\begin{aligned}
+u^{n+1}_{i,j}= \left(R1\left[ 2u^n_{i,j}-R2*2\Delta t V_{i,j}+ \right.\right.\\
+\left.\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right.\right. \\
++ \left.\left.Cy2\left(2q_{i,j}(u^n_{i,j+1}-u^n_{i,j})\right) + dt2 f^n_{i,j}\right]\right)/(1-R1R2)
+\end{aligned}
+\end{equation}
+
+\subsubsection*{South}
+\begin{equation}
+\begin{aligned}
+u^{n+1}_{i,j}= \left(R1\left[ 2u^n_{i,j}-R2*2\Delta t V_{i,j}+ \right.\right.\\
+\left.\left.Cx2\left(q_{i+\frac{1}{2},j}(u^n_{i+1,j}-u^n_{i,j})-q_{i-\frac{1}{2},j}(u^n_{i,j}-u^n_{i-1,j})\right)\right.\right. \\
++ \left.\left.Cy2\left(2q_{i,j}(u^n_{i,j-1}-u^n_{i,j})\right) + dt2 f^n_{i,j}\right]\right)/(1-R1R2)
+\end{aligned}
+\end{equation}
+
+
+\subsection*{Truncation error}
+\begin{equation}
+\frac{\partial^2 u}{\partial t^2} + b \frac{\partial u}{\partial t} = \frac{\partial}{\partial x}\left(q(x,y)\frac{\partial u}{\partial x}\right)+ \frac{\partial}{\partial y}\left(q(x,y)\frac{\partial u}{\partial y}\right)+ f(x,y,t)
+\end{equation}
+
+In this case will we set q to be a constant, and we are able to rewrite it
+
+\begin{equation}
+\frac{\partial^2 u}{\partial t^2} + b \frac{\partial u}{\partial t} = q\left(\frac{\partial^2 u}{\partial x^2}+\frac{\partial^2 u}{\partial y^2}\right)
+\end{equation}
+
+Then we can derive the truncation error
+\begin{equation}
+\begin{aligned}
+D_tD_tu + bD_{2t}u = q(d_xD_xu+D_yD_yu) +R \\
+R^n = D_tD_tu + bD_{2t}u - q(d_xD_xu+D_yD_yu) \\
+D_tD_tu = \frac{1}{12}u_{tttt}(t_n)\Delta t^2\\
+bD_{2t}u = \frac{b}{6}u_{ttt}(t_n)\Delta t^2\\
+qD_xD_xu = \frac{q}{12}u_{xxxx}(t_n)\Delta x^2\\
+qD_yD_yu = \frac{q}{12}u_{yyyy}(t_n)\Delta y^2\\
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+R^n_{i,j}=\frac{1}{12}u_{tttt}(x_i,y_j,t_n)\Delta t^2+\frac{b}{6}u_{ttt}(x_i,y_j,t_n)\Delta t^2-\\
+\frac{q}{12}\left(u_{xxxx}(t_n)\Delta x^2+u_{yyyy}(t_n)\Delta y^2\right)\\
+\end{aligned}
+\end{equation}
+
+This shows that we should get a second order error
+
+
+\end{document}
